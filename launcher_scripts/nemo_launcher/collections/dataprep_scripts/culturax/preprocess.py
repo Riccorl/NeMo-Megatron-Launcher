@@ -19,7 +19,7 @@ from time import sleep
 import hydra
 import nemo_launcher.utils.file_utils as utils  # TODO: check if this in python path
 import psutil
-
+from pathlib import Path
 
 @hydra.main(config_path="conf", config_name="config")
 def main(cfg):
@@ -154,8 +154,22 @@ def main(cfg):
                 os.remove(extracted_path)
     
     elif cfg.get("cluster_type") in ["interactive"]:
-        file_numbers = cfg.get("file_numbers")
-        files_list = utils.convert_file_numbers(file_numbers)
+        # file_numbers = cfg.get("file_numbers")
+        # if file_numbers is None:
+        #     # enumerate all files in data_dir
+        #     files_list = []
+        #     for file in os.listdir(data_dir):
+        #         if file.endswith(".jsonl"):
+        #             # remove extension
+        #             file_name = file.rsplit(".", 1)[0]
+        #             files_list.append(int(file_name.split(".")[-1]))
+        # else:
+        #     files_list = utils.convert_file_numbers(file_numbers)
+        files_list = []
+        for file in os.listdir(data_dir):
+            if file.endswith(".jsonl"):
+                # remove extension
+                files_list.append(Path(file).name)
         # Assumes launched via mpirun:
         #   mpirun -N <nnodes> -npernode 1 ...
         wrank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
@@ -173,8 +187,9 @@ def main(cfg):
         files_list_groups = utils.split_list(files_list, wsize)
         files_to_preproc = files_list_groups[wrank]
         ncpus = psutil.cpu_count(logical=False)
-        for file_number in files_to_preproc:
-            extracted_path = os.path.join(data_dir, f"{file_number:02d}.jsonl")
+        for file_name in files_to_preproc:
+            # extracted_path = os.path.join(data_dir, f"{file_number:02d}.jsonl")
+            extracted_path = os.path.join(data_dir, f"{file_name}")
 
             model_type = 't5'
             if 'bert' in data_config:
@@ -184,7 +199,7 @@ def main(cfg):
             elif 'llama' in data_config:
                 model_type = 'llama'
 
-            output_prefix = os.path.join(data_dir, f"my-{model_type}_{file_number:02d}")
+            output_prefix = os.path.join(data_dir, f"my-{model_type}_{file_name.rsplit('.', 1)[0]}")
 
             flags = (
                 f"--input {extracted_path} "

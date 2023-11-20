@@ -5,6 +5,7 @@
 output
 result
 data
+data_jsonl
 *.pt
 tests/data/asr
 .DS_Store
