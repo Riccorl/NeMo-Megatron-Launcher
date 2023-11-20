@@ -4,11 +4,11 @@ import logging
 import os
 
 
-def save_dataset(dataset, dataset_path, language, suffix):
-    if not os.path.exists(dataset_path):
-        os.makedirs(dataset_path)
+def save_dataset(dataset, path_to_save, language, suffix):
+    if not os.path.exists(path_to_save):
+        os.makedirs(path_to_save)
 
-    dataset.to_parquet(dataset_path + "/" + language + "_" + str(suffix) + ".parquet")
+    dataset.to_parquet(path_to_save + "/" + language + "_" + str(suffix) + ".parquet")
 
 
 def download_streaming_dataset(dataset, args):
@@ -38,7 +38,7 @@ def download_streaming_dataset(dataset, args):
                 if saved_megabytes + actual_megabytes > MAX_MEGABYTES:
                     print()
                     print("Save final dataset...")
-                    save_dataset(hf_dataset, args.dataset_path, args.language, it_ds)
+                    save_dataset(hf_dataset, args.path_to_save, args.language, it_ds)
                     break
 
                 if (
@@ -47,7 +47,7 @@ def download_streaming_dataset(dataset, args):
                     print()
                     print("Save partial dataset...")
 
-                    save_dataset(hf_dataset, args.dataset_path, args.language, it_ds)
+                    save_dataset(hf_dataset, args.path_to_save, args.language, it_ds)
 
                     # clean stuffs
                     saved_megabytes += actual_megabytes
@@ -61,7 +61,7 @@ def download_streaming_dataset(dataset, args):
     except Exception as e:
         print(e)
         print("Trying to save the dataset anyway...")
-        save_dataset(hf_dataset, args.dataset_path, args.language, "error")
+        save_dataset(hf_dataset, args.path_to_save, args.language, "error")
 
 
 def get_script_parameters(parser):
@@ -70,14 +70,14 @@ def get_script_parameters(parser):
         "--max-mb",
         dest="max_mb",
         action="store",
-        help=f"Max size (in MB) of data to download",
+        help="Max size (in MB) of data to download",
     )
     parser.add_argument(
         "-p",
         "--partial-mb",
         dest="partial_mb",
         action="store",
-        help=f"Max size (in MB) of data allowed to be in-memory, the size of each saved file",
+        help="Max size (in MB) of data allowed to be in-memory, the size of each saved file",
     )
     parser.add_argument(
         "-s",
@@ -85,21 +85,21 @@ def get_script_parameters(parser):
         dest="step",
         action="store",
         default=10,
-        help=f"Number of document to download to wait every memory check",
+        help="Number of document to download to wait every memory check",
     )
     parser.add_argument(
         "-d",
         "--dataset-path",
-        dest="dataset_path",
+        dest="path_to_save",
         action="store",
-        help=f"Path location where the dataset will be saved",
+        help="Path location where the dataset will be saved",
     )
     parser.add_argument(
         "-l",
         "--language",
         dest="language",
         action="store",
-        help=f"Language contained in CulturaX to download",
+        help="Language contained in CulturaX to download",
     )
 
     return parser.parse_args()

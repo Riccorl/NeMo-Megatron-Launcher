@@ -1,119 +1,140 @@
-# # Copyright (c) 2023, NVIDIA CORPORATION.  All rights reserved.
-# #
-# # Licensed under the Apache License, Version 2.0 (the "License");
-# # you may not use this file except in compliance with the License.
-# # You may obtain a copy of the License at
-# #
-# #     http://www.apache.org/licenses/LICENSE-2.0
-# #
-# # Unless required by applicable law or agreed to in writing, software
-# # distributed under the License is distributed on an "AS IS" BASIS,
-# # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# # See the License for the specific language governing permissions and
-# # limitations under the License.
-
-# """
-# Dolly data downloading.
-# Example usage:
-#  python download.py \
-#     --path_to_save=<path/to/save/dolly> \
-#     --download_link=<link/to/download>
-# """
-
-# import os
-# from argparse import ArgumentParser
-
-# from datasets import load_dataset
-
-# dataset_name = "uonlp/CulturaX"
-
-
-# def get_file_name(link):
-#     file_name = link.split("/")[-1]
-
-#     return file_name
-
-
-# def get_args(dataset_name=dataset_name):
-#     parser = ArgumentParser()
-#     parser.add_argument(
-#         "--path_to_save",
-#         type=str,
-#         required=True,
-#         help="Specify the path where to save the data.",
-#     )
-#     parser.add_argument(
-#         "--dataset_name",
-#         type=str,
-#         required=False,
-#         default=dataset_name,
-#         help="Specify the name of the dataset from HF Hub.",
-#     )
-#     args = parser.parse_args()
-
-#     return args
-
-
-# def main():
-#     args = get_args()
-#     path_to_save = args.path_to_save
-#     dataset_name = args.dataset_name
-#     # link_to_download = args.link_to_download
-#     # file_name = get_file_name(link_to_download)
-
-#     print(f"Downloading dataset `{dataset_name}` to {path_to_save} ...")
-
-#     os.system(f"cd {path_to_save}")
-#     _ = load_dataset(
-#         "uonlp/CulturaX",
-#         language="it",
-#         token=True,
-#         # data_dir="it",
-#         # data_files=["it_part_00000.parquet", "it_part_00001.parquet"],
-#         split="train[:1%]",
-#         cache_dir=path_to_save,
-#     )
-
-#     print(f"Dataset `{dataset_name}` was successfully downloaded to {path_to_save} .")
-
-
-# if __name__ == "__main__":
-#     main()
-
-### Import Libraries
 import argparse
+import logging
+import psutil
+from pathlib import Path
+import os
+import json
+
+import huggingface_hub
 from datasets import load_dataset
 from huggingface_hub import login
-import huggingface_hub
-# from nemo_launcher.collections.dataprep_scripts.culturax.utils import download_streaming_dataset, get_script_parameters
-from utils import download_streaming_dataset, get_script_parameters
+from utils import download_streaming_dataset
+from tqdm import tqdm
 
-### Constant variables
-HF_CACHE = "./.hf_cache"
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+HF_CACHE = os.getenv("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
 
 
 def main(args):
     token = huggingface_hub.HfFolder.get_token()
     if token is None:
-        print("HuggingFace Login...")
+        logger.info("HuggingFace Login")
         login()
 
-    print("==== Starting download CulturaX in streaming mode ====")
-    dataset = load_dataset(
-        path="uonlp/CulturaX",
-        language=args.language,
-        split="train",
-        streaming=True,
-        cache_dir=HF_CACHE,
-        token=True,
-    )
+    if args.streaming:
+        logger.info("==== Starting download CulturaX in streaming mode ====")
+        dataset = load_dataset(
+            path=args.dataset_name,
+            language=args.language,
+            split="train",
+            streaming=True,
+            cache_dir=HF_CACHE,
+            token=True,
+        )
+        download_streaming_dataset(dataset, args)
+    else:
+        logger.info("==== Starting download CulturaX ====")
+        dataset = load_dataset(
+            path=args.dataset_name,
+            language=args.language,
+            # split="train",
+            cache_dir=HF_CACHE,
+            token=True,
+            num_proc=psutil.cpu_count(logical=False),
+        )
+        # now we can save the dataset in jsonl format, divided in multiple files
+        # we would like to parallelize this step, we can use the multiprocessing library
+        dataset_path = Path(args.path_to_save)
+        dataset_path.mkdir(parents=True, exist_ok=True)
 
-    download_streaming_dataset(dataset, args)
+        # create a new file for each split, parallelize this step
+        dataset_subsets = []
+        for ds_split in dataset:
+            print(f"Saving `{ds_split}` split")
+            logger.info(f"Saving `{ds_split}` split")
+            # if the dataset is too big, we can split it in multiple files
+            # but if it is small enough, we can save it in a single file
+            shards = dataset[ds_split].num_rows // args.split_size + 1
+            print(f"Splitting in {shards} shards")
+            for i in range(shards):
+                dataset_subsets.append(
+                    dataset[ds_split][i * args.split_size : (i + 1) * args.split_size]
+                )
+
+            split_path = dataset_path / f"{ds_split}"
+            split_path.mkdir(parents=True, exist_ok=True)
+
+            for idx, subset in tqdm(enumerate(dataset_subsets)):
+                print(f"Writing to {split_path / f'{idx}.jsonl'}")
+                with open(split_path / f"{idx}.jsonl", "w") as f:
+                    # it is a dict from key to list of values for that key
+                    # e.g. "text" -> [tex1, ..., textn]
+                    # "id" -> [id1, ..., idn]
+                    # we instead want a list of dicts in the form of
+                    # [{"text": text1, "id": id1 }, ..., {"text": textn, "id": idn }]
+                    rows = {}
+                    for key, values in subset.items():
+                        for i, value in enumerate(values):
+                            if i not in rows:
+                                rows[i] = {}
+                            rows[i][key] = value
+                    rows = rows.values()
+                    f.writelines(json.dumps(r) + "\n" for r in rows)
+
+            dataset_subsets = []
 
 
-### Main
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Download CulturaX sample")
-    args = get_script_parameters(parser)
+    parser = argparse.ArgumentParser(description="Download HF Dataset")
+    parser.add_argument(
+        "--dataset_name",
+        type=str,
+        default="uonlp/CulturaX",
+        help="Dataset to download.",
+    )
+    parser.add_argument(
+        "--language",
+        type=str,
+        default="it",
+        help="Language of the dataset to download.",
+    )
+    parser.add_argument(
+        "--path_to_save",
+        type=str,
+        default="./",
+        help="Path to save the dataset.",
+    )
+    parser.add_argument(
+        "--max_mb",
+        type=int,
+        default=100,
+        help="Max size (in MB) of data to download",
+    )
+    parser.add_argument(
+        "--partial_mb",
+        type=int,
+        default=10,
+        help="Max size (in MB) of data allowed to be in-memory, the size of each saved file",
+    )
+    parser.add_argument(
+        "--step",
+        type=int,
+        default=10,
+        help="Number of document to download to wait every memory check",
+    )
+    parser.add_argument(
+        "--streaming",
+        action="store_true",
+        help="Download in streaming mode",
+    )
+    parser.add_argument(
+        "--split_size",
+        type=int,
+        default=100_000,
+        help="Number of document per file during jsonl saving",
+    )
+    args = parser.parse_args()
 
     main(args)
