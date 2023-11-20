@@ -58,6 +58,32 @@ def main(cfg):
         for proc in proc_list:
             proc.join()
 
+    if cfg.get("cluster_type") == "interactive":
+        file_numbers = cfg["file_numbers"]
+        # Downloading the files
+        files_list = utils.convert_file_numbers(file_numbers)
+        # Assumes launched via mpirun:
+        #   mpirun -N <nnodes> -npernode <preproc_npernode> ...
+        # where preproc_npernode is set in dataprep config -> bcp config
+        wrank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
+        wsize = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 1))
+        files_list_groups = utils.split_list(files_list, wsize)
+        files_to_download = files_list_groups[wrank]
+        proc_list = []
+        for file_number in files_to_download:
+            url = f"{pile_url_train}{file_number:02d}.jsonl.zst"
+            output_file = f"{file_number:02d}.jsonl.zst"
+            print(url)
+            print(data_dir)
+            print(output_file)
+            # TODO: Consider multiprocessing.Pool instead.
+            proc = multiprocessing.Process(target=utils.download_single_file, args=(url, data_dir, output_file))
+            proc_list.append(proc)
+            proc.start()
+
+        for proc in proc_list:
+            proc.join()
+
 
 if __name__ == "__main__":
     main()

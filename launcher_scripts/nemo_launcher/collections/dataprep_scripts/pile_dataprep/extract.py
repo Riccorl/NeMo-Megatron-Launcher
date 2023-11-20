@@ -58,6 +58,30 @@ def main(cfg) -> None:
 
         for proc in proc_list:
             proc.join()
+    
+    elif cfg.get("cluster_type") in ["interactive"]:
+        file_numbers = cfg.get("file_numbers")
+        # Downloading the files
+        files_list = utils.convert_file_numbers(file_numbers)
+        # Assumes launched via mpirun:
+        #   mpirun -N <nnodes> -npernode 1 ...
+        wrank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
+        wsize = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 1))
+        files_list_groups = utils.split_list(files_list, wsize)
+        files_to_extract = files_list_groups[wrank]
+        proc_list = []
+        for file_number in files_to_extract:
+            downloaded_path = os.path.join(data_dir, f"{file_number:02d}.jsonl.zst")
+            output_file = f"{file_number:02d}.jsonl"
+            # TODO: Consider multiprocessing.Pool instead.
+            proc = multiprocessing.Process(
+                target=utils.extract_single_zst_file, args=(downloaded_path, data_dir, output_file, rm_downloaded),
+            )
+            proc_list.append(proc)
+            proc.start()
+
+        for proc in proc_list:
+            proc.join()
 
 
 if __name__ == "__main__":

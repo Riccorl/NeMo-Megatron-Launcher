@@ -173,7 +173,13 @@ class DataStage(NemoMegatronStage):
                     "container_image": container_image,}
             )
         elif cluster == "interactive":
-            raise ValueError("Data preparation is not supported in interactive mode.")
+            cluster_parameters.update(
+                {
+                    **shared_parameters,
+                    **private_parameters,
+                    }
+            )
+            # raise ValueError("Data preparation is not supported in interactive mode.")
 
         return cluster_parameters
 
