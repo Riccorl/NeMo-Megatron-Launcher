@@ -24,7 +24,7 @@ exp_manager:
   explicit_log_dir: ${training.run.results_dir}/results
   exp_dir: null
   name: megatron_llama
-  create_wandb_logger: true
+  create_wandb_logger: false
   wandb_logger_kwargs:
     project: nemo_llama_pretrain
     name: ${training.run.name}
@@ -148,7 +148,7 @@ model:
   data:
     data_impl: mmap
     splits_string: "99990,8,2"
-    seq_length: 4096
+    seq_length: 2048
     skip_warmup: true
     num_workers: 2
     dataloader_type: single
@@ -176,4 +176,4 @@ model:
     - .1
     - ${data_dir}/preprocessed/8.jsonl_text_document
     - .1
-    - ${data_dir}/preprocessed/preprocessed/9.jsonl_text_document
+    - ${data_dir}/preprocessed/9.jsonl_text_document

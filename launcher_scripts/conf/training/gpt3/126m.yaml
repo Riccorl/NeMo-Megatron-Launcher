@@ -100,12 +100,19 @@ model:
   num_query_groups: null # Number of query groups for group query attention. If None, normal attention is used.
 
   tokenizer:
-    library: 'megatron'
-    type: 'GPT2BPETokenizer'
-    model: null
-    delimiter: null # only used for tabular tokenizer
-    vocab_file: ${data_dir}/bpe/vocab.json
-    merge_file: ${data_dir}/bpe/merges.txt
+    library: 'sentencepiece'
+    type: null
+    model: ${data_dir}/tokenizer/custom_sp_tokenizer.model
+    delimiter: null
+    vocab_file: null
+    merge_file: null
+    sentencepiece_legacy: False
+    # library: 'megatron'
+    # type: 'GPT2BPETokenizer'
+    # model: null
+    # delimiter: null # only used for tabular tokenizer
+    # vocab_file: ${data_dir}/bpe/vocab.json
+    # merge_file: ${data_dir}/bpe/merges.txt
 
   # precision
   native_amp_init_scale: 4294967296 # 2 ** 32
@@ -170,7 +177,7 @@ model:
 
   data:
     data_impl: mmap
-    splits_string: "9990,8,1"
+    splits_string: "99990,8,2"
     seq_length: 2048
     skip_warmup: True
     num_workers: 2
@@ -180,113 +187,134 @@ model:
     eod_mask_loss: False # Mask loss for the end of document tokens
     index_mapping_dir: null # path to save index mapping .npy files, by default will save in the same location as data_prefix
     data_prefix: # Should be weight path weight path... for a blended dataset
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.0_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.1_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.2_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.3_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.4_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.5_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.6_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.7_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.8_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.9_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.10_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.11_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.12_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.13_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.14_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.15_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.16_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.17_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.18_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.19_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.20_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.21_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.22_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.23_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.24_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.25_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.26_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.27_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.28_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.29_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.30_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.31_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.32_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.33_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.34_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.35_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.36_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.37_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.38_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.39_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.40_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.41_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.42_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.43_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.44_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.45_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.46_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.47_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.48_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.49_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.50_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.51_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.52_text_document
-      - 0.0184
-      - ${data_dir}/my-gpt3_culturax.53_text_document
-      - 0.0185
-      - ${data_dir}/my-gpt3_culturax.54_text_document
+      - .1
+      - ${data_dir}/preprocessed/0.jsonl_text_document
+      - .1
+      - ${data_dir}/preprocessed/1.jsonl_text_document
+      - .1
+      - ${data_dir}/preprocessed/2.jsonl_text_document
+      - .1
+      - ${data_dir}/preprocessed/3.jsonl_text_document
+      - .1
+      - ${data_dir}/preprocessed/4.jsonl_text_document
+      - .1
+      - ${data_dir}/preprocessed/5.jsonl_text_document
+      - .1
+      - ${data_dir}/preprocessed/6.jsonl_text_document
+      - .1
+      - ${data_dir}/preprocessed/7.jsonl_text_document
+      - .1
+      - ${data_dir}/preprocessed/8.jsonl_text_document
+      - .1
+      - ${data_dir}/preprocessed/9.jsonl_text_document
+
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.0_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.1_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.2_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.3_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.4_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.5_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.6_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.7_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.8_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.9_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.10_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.11_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.12_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.13_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.14_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.15_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.16_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.17_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.18_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.19_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.20_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.21_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.22_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.23_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.24_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.25_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.26_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.27_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.28_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.29_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.30_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.31_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.32_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.33_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.34_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.35_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.36_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.37_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.38_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.39_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.40_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.41_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.42_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.43_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.44_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.45_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.46_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.47_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.48_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.49_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.50_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.51_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.52_text_document
+      # - 0.0184
+      # - ${data_dir}/my-gpt3_culturax.53_text_document
+      # - 0.0185
+      # - ${data_dir}/my-gpt3_culturax.54_text_document
