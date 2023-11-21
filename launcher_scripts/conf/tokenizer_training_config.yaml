@@ -1,20 +1,7 @@
 defaults:
   - _self_
   - cluster: interactive # Set to bcm for BCM and BCP clusters. Set to k8s for a k8s cluster.
-  - data_preparation: generic/custom_dataset
-  - quality_filtering: heuristic/english
-  - training: gpt3/126m
-  - conversion: gpt3/convert_gpt3
-  - fine_tuning: null
-  - peft: null
-  - prompt_learning: null
-  - adapter_learning: null
-  - ia3_learning: null
-  - evaluation: gpt3/evaluate_all
-  - export: gpt3/export_gpt3
-  - rlhf_rm: gpt3/2b_rm
-  - rlhf_ppo: gpt3/2b_ppo
-  - override hydra/job_logging: stdout
+  - data_preparation: generic/tokenizer_training
 
 hydra:
   run:
@@ -25,19 +12,14 @@ debug: True
 
 stages:
   - data_preparation
-  # - training
-  # - conversion
-  #- prompt_learning
-  #- adapter_learning
-  #- ia3_learning
-  #- evaluation
-  #- export
 
 cluster_type: interactive # bcm, bcp, or k8s. If bcm or k8s, it must match - cluster above.
 launcher_scripts_path: /opt/NeMo-Megatron-Launcher/launcher_scripts # Path to NeMo Megatron Launch scripts, should ends with /launcher_scripts
-data_dir: /root/host/experiments/llama/data # Location to store and read the data.
+data_dir: null # Location to store and read the data.
+raw_data_dir: null # location where is the raw data to be preprocessed
+tokenizer_data_file: null # location of the text file to train the tokenizer
 # data_dir: /root/host/culturaX/jsonl/it/train  # Location to store and read the data.
-base_results_dir: /root/host/experiments/llama/results # Location to store the results, checkpoints and logs.
+base_results_dir: ${.data_dir}/results # Location to store the results, checkpoints and logs.
 container_mounts: # List of additional paths to mount to container. They will be mounted to same path.
   - null
 container: nvcr.io/ea-bignlp/ga-participants/nemofw-training:23.08.03

@@ -12,218 +12,66 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Multi-worker data preprocessing.
+Example usage:
+ python preprocess.py \
+    --worker-mapping-file=<path/to/preprocess_mapping_file> \
+    --output-path=<output/path> \
+    --tokenizer-library <some_tokenizer_lib> \
+    --tokenizer-model <some_tokenizer_model> \
+    --dataset-impl mmap \
+    --workers 80  \
+    --apply-ftfy
+"""
+
+import argparse
 import os
 import subprocess
-from time import sleep
-
-import hydra
-import nemo_launcher.utils.file_utils as utils  # TODO: check if this in python path
-import psutil
-from pathlib import Path
-
-@hydra.main(config_path="conf", config_name="config")
-def main(cfg):
-    launcher_scripts_path = cfg.get("launcher_scripts_path")
-    data_config = cfg.get("data_config")
-    data_dir = cfg.get("data_dir")
-    rm_extracted = cfg.get("rm_extracted")
-    tokenizer_type = cfg.get("tokenizer_type")
-    tokenizer_library = cfg.get("tokenizer_library")
-    tokenizer_model = cfg.get("tokenizer_model")
-    assert data_dir is not None, "data_dir must be a valid path"
-
-    # Vocab
-    vocab_dir = cfg.get("vocab_save_dir")
-    assert vocab_dir is not None, "vocab_save_dir must be a valid path."
-    if "gpt" in tokenizer_type.lower():
-        vocab_path = os.path.join(launcher_scripts_path, vocab_dir, "vocab.json")
-    else:
-        vocab_path = os.path.join(launcher_scripts_path, vocab_dir, "vocab.txt")
-
-    # Merges
-    merges_dir = cfg.get("merges_save_dir")
-    assert merges_dir is not None, "merges_save_dir must be a valid path."
-    merges_path = os.path.join(launcher_scripts_path, merges_dir, "merges.txt")
-
-    # This compile doesn't seem to do anything. It compiles
-    # "helpers.cpython-38-x86_64-linux-gnu.so", but since that file already
-    # exists, it doesn't do anything. Force make via: touch helpers.cpp
-    megatron_dir = "/opt/NeMo/nemo/collections/nlp/data/language_modeling/megatron"
-    compiled_helpers_lib = os.path.join(megatron_dir, "compiled_helpers_lib")
-    compilecmd = f"cd /opt/NeMo; git rev-parse HEAD; " f"cd {megatron_dir}; " f"touch helpers.cpp; make;"
-
-    code_path = "/opt/NeMo/scripts/nlp_language_modeling/preprocess_data_for_megatron.py"
-    runcmd = (
-        f"cd {megatron_dir}; "
-        f'export PYTHONPATH="/opt/NeMo/.:$PYTHONPATH"; '
-        f'export TRANSFORMERS_CACHE="/temp_root/.cache/"; '
-        f"python3 {code_path} "
-    )
-
-    if cfg.get("cluster_type") == "bcm":
-        file_number = int(os.environ.get("SLURM_ARRAY_TASK_ID"))
-        extracted_path = os.path.join(data_dir, f"{file_number:02d}.jsonl")
-
-        model_type = 't5'
-        if 'bert' in data_config:
-            model_type = 'bert'
-        elif 'gpt3' in data_config:
-            model_type = 'gpt3'
-        elif 'llama' in data_config:
-            model_type = 'llama'
-
-        output_prefix = os.path.join(data_dir, f"my-{model_type}_{file_number:02d}")
-
-        flags = (
-            f"--input {extracted_path} "
-            f"--output-prefix {output_prefix} "
-            f"--vocab {vocab_path} "
-            f"--dataset-impl mmap "
-            f"--tokenizer-library megatron "
-            f"--tokenizer-type {tokenizer_type} "
-            f"--tokenizer-library {tokenizer_library} "
-            f"--tokenizer-model {tokenizer_model} "
-            f"--workers $SLURM_CPUS_ON_NODE "
-        )
-
-        if model_type == 'bert':
-            # Used for bert binary head (Next sentence predition)
-            flags += "--split-sentences "
-        else:
-            flags += f"--merge-file {merges_path} " f"--append-eod "
-
-        os.system(compilecmd)
-        runcmd += f"{flags} "
-        os.system(runcmd)
-        if rm_extracted:
-            os.remove(extracted_path)
-    elif cfg.get("cluster_type") in ["bcp", "k8s"]:
-        file_numbers = cfg.get("file_numbers")
-        files_list = utils.convert_file_numbers(file_numbers)
-        # Assumes launched via mpirun:
-        #   mpirun -N <nnodes> -npernode 1 ...
-        wrank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
-        wsize = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
-        lrank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
-
-        if lrank == 0:
-            # Compile once per node. Should be one container instance per node.
-            os.system(compilecmd)
-            os.system(f"touch {compiled_helpers_lib}")
-        else:
-            while not os.path.exists(compiled_helpers_lib):
-                sleep(1)
-
-        files_list_groups = utils.split_list(files_list, wsize)
-        files_to_preproc = files_list_groups[wrank]
-        ncpus = psutil.cpu_count(logical=False)
-        for file_number in files_to_preproc:
-            extracted_path = os.path.join(data_dir, f"{file_number:02d}.jsonl")
-
-            model_type = 't5'
-            if 'bert' in data_config:
-                model_type = 'bert'
-            elif 'gpt3' in data_config:
-                model_type = 'gpt3'
-            elif 'llama' in data_config:
-                model_type = 'llama'
-
-            output_prefix = os.path.join(data_dir, f"my-{model_type}_{file_number:02d}")
-
-            flags = (
-                f"--input {extracted_path} "
-                f"--output-prefix {output_prefix} "
-                f"--vocab {vocab_path} "
-                f"--dataset-impl mmap "
-                f"--tokenizer-library megatron "
-                f"--tokenizer-type {tokenizer_type} "
-                f"--tokenizer-library {tokenizer_library} "
-                f"--tokenizer-model {tokenizer_model} "
-                f"--workers {ncpus} "
-            )
-
-            if model_type == 'bert':
-                # Used for bert binary head (Next sentence predition)
-                flags += "--split-sentences "
-            else:
-                flags += f"--merge-file {merges_path} " f"--append-eod "
-
-            proc = subprocess.Popen(runcmd + flags, shell=True)
-            proc.wait()
-            if rm_extracted:
-                os.remove(extracted_path)
-    
-    elif cfg.get("cluster_type") in ["interactive"]:
-        # file_numbers = cfg.get("file_numbers")
-        # if file_numbers is None:
-        #     # enumerate all files in data_dir
-        #     files_list = []
-        #     for file in os.listdir(data_dir):
-        #         if file.endswith(".jsonl"):
-        #             # remove extension
-        #             file_name = file.rsplit(".", 1)[0]
-        #             files_list.append(int(file_name.split(".")[-1]))
-        # else:
-        #     files_list = utils.convert_file_numbers(file_numbers)
-        files_list = []
-        for file in os.listdir(data_dir):
-            if file.endswith(".jsonl"):
-                # remove extension
-                files_list.append(Path(file).name)
-        # Assumes launched via mpirun:
-        #   mpirun -N <nnodes> -npernode 1 ...
-        wrank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
-        wsize = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 1))
-        lrank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
-
-        if lrank == 0:
-            # Compile once per node. Should be one container instance per node.
-            os.system(compilecmd)
-            os.system(f"touch {compiled_helpers_lib}")
-        else:
-            while not os.path.exists(compiled_helpers_lib):
-                sleep(1)
-
-        files_list_groups = utils.split_list(files_list, wsize)
-        files_to_preproc = files_list_groups[wrank]
-        ncpus = psutil.cpu_count(logical=False)
-        for file_name in files_to_preproc:
-            # extracted_path = os.path.join(data_dir, f"{file_number:02d}.jsonl")
-            extracted_path = os.path.join(data_dir, f"{file_name}")
-
-            model_type = 't5'
-            if 'bert' in data_config:
-                model_type = 'bert'
-            elif 'gpt3' in data_config:
-                model_type = 'gpt3'
-            elif 'llama' in data_config:
-                model_type = 'llama'
-
-            output_prefix = os.path.join(data_dir, f"my-{model_type}_{file_name.rsplit('.', 1)[0]}")
-
-            flags = (
-                f"--input {extracted_path} "
-                f"--output-prefix {output_prefix} "
-                f"--vocab {vocab_path} "
-                f"--dataset-impl mmap "
-                f"--tokenizer-library megatron "
-                f"--tokenizer-type {tokenizer_type} "
-                f"--tokenizer-library {tokenizer_library} "
-                f"--tokenizer-model {tokenizer_model} "
-                f"--workers {ncpus} "
-            )
-
-            if model_type == 'bert':
-                # Used for bert binary head (Next sentence predition)
-                flags += "--split-sentences "
-            else:
-                flags += f"--merge-file {merges_path} " f"--append-eod "
-
-            proc = subprocess.Popen(runcmd + flags, shell=True)
-            proc.wait()
-            if rm_extracted:
-                os.remove(extracted_path)
-
+import time
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Preprocess custom dataset", allow_abbrev=False)
+
+    parser.add_argument("--output-path", help="Path to store output bin files", required=True)
+    parser.add_argument("--worker-mapping-file", help="Decide which worker download which languages", required=True)
+    parser.add_argument(
+        "--workers-per-node",
+        default=int(os.environ.get("SLURM_NTASKS_PER_NODE", 1)),
+        help="Number of workers per node in preprocessing step",
+        type=int,
+    )
+    parser.add_argument("--bcp", action="store_true", help="Whether on BCP platform")
+    args, other_args = parser.parse_known_args()
+
+    workers_per_node = args.workers_per_node  # local world size
+    if args.bcp:
+        global_rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
+        task_id = global_rank // workers_per_node
+        rank = global_rank % workers_per_node
+    else:  # on slurm based platforms
+        task_id = int(os.environ.get("SLURM_ARRAY_TASK_ID", 0))
+        rank = int(os.environ.get("LOCAL_RANK", 0))
+
+    with open(args.worker_mapping_file) as f:
+        mapping = f.readlines()
+    data_files = []
+    if task_id * workers_per_node + rank < len(mapping):
+        data_files = mapping[task_id * workers_per_node + rank].strip().split(",")
+    print(f" ****** Task ID {task_id:02d} Rank {rank:02d} is preparing to preprocess {data_files}...")
+
+    os.makedirs(args.output_path, exist_ok=True)
+    start_time = time.time()
+    cmd = [
+        "python",
+        "/opt/NeMo/scripts/nlp_language_modeling/preprocess_data_for_megatron.py",
+    ]
+    for split in data_files:
+        if not split:  # Remove empty split
+            continue
+        print(f" ****** Task ID {task_id:02d} Rank {rank:02d} starts to preprocess {os.path.basename(split)}...")
+        input_arg = ["--input", split]
+        output_arg = ["--output-prefix", os.path.join(args.output_path, os.path.basename(split))]
+        subprocess.check_call(cmd + input_arg + output_arg + other_args)
+        print(f" ****** Task ID {task_id:02d} Rank {rank:02d} finished preprocessing {os.path.basename(split)}...")
+        print(f" ****** Task ID {task_id:02d} Rank {rank:02d} time elapsed {(time.time() - start_time) / 60:.2f} min.")

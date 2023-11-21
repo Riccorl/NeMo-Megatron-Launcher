@@ -8,15 +8,15 @@ run:
   workers_per_node: 1 # Number of workers per node in preprocessing step.
 
 dataset: custom_dataset
-is_python_code: True
+is_python_code: False
 custom_dataset_dir: ${data_dir}/custom_dataset
-train_tokenizer: False # True to train a sentence piece tokenizer
+train_tokenizer: True # True to train a sentence piece tokenizer
 train_tokenizer_args: # For all options please check: https://github.com/google/sentencepiece/blob/master/doc/options.md
-   input: "/root/host/culturaX/text/it/train/text.txt" # text file for training tokenizer
+   input: ${tokenizer_data_file} # text file for training tokenizer
    input_format: "text" # text or tsv
    model_prefix: "custom_sp_tokenizer"
    model_type: "bpe" # model algorithm: unigram, bpe, word or char
-   vocab_size: 32000 # Vocabulary size
+   vocab_size: 32_000 # Vocabulary size
    character_coverage: 0.9995 # character coverage to determine the minimum symbols
    input_sentence_size: 75_000_000
    shuffle_input_sentence: True
@@ -27,7 +27,7 @@ train_tokenizer_args: # For all options please check: https://github.com/google/
 bpe_save_dir: ${.custom_dataset_dir}/bpe # Dir to save sentence piece tokenizer model and vocab files
 # ----------------------------------------------------------------------------------------------
 preprocess_data: True  # True to preprocess the data from json, jsonl or json.gz files, False otherwise.
-raw_dataset_files: /root/host/culturaX/jsonl/it/train # Either a string (path to dataset folder) or a list (of files)
+raw_dataset_files: ${raw_data_dir} # Either a string (path to dataset folder) or a list (of files)
   # - null # Each file should be input json, jsonl or json.gz file
 tokenizer_model: ${.bpe_save_dir}/${data_preparation.train_tokenizer_args.model_prefix}.model # trained SentencePiece tokenizer model
 preprocess_worker_mapping: ${.custom_dataset_dir}/preprocess_mapping

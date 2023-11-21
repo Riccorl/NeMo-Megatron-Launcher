@@ -1,20 +1,91 @@
 import argparse
-import logging
-import psutil
-from pathlib import Path
-import os
 import json
+import logging
+import os
+from pathlib import Path
 
 import huggingface_hub
-from datasets import load_dataset
+import psutil
+from datasets import Dataset, load_dataset, DatasetDict
 from huggingface_hub import login
-from utils import download_streaming_dataset
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 HF_CACHE = os.getenv("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
+
+
+def save_to_jsonl(dataset, path_to_save, split_size):
+    # now we can save the dataset in jsonl format, divided in multiple files
+    # we would like to parallelize this step, we can use the multiprocessing library
+    dataset_path = Path(path_to_save)
+    dataset_path.mkdir(parents=True, exist_ok=True)
+
+    # create a new file for each split, parallelize this step
+    dataset_subsets = []
+    for ds_split in dataset:
+        print(f"Saving `{ds_split}` split")
+        logger.info(f"Saving `{ds_split}` split")
+        # if the dataset is too big, we can split it in multiple files
+        # but if it is small enough, we can save it in a single file
+        shards = dataset[ds_split].num_rows // split_size + 1
+        print(f"Splitting in {shards} shards")
+        for i in range(shards):
+            dataset_subsets.append(
+                dataset[ds_split][i * split_size : (i + 1) * split_size]
+            )
+
+        split_path = dataset_path / f"{ds_split}"
+        split_path.mkdir(parents=True, exist_ok=True)
+
+        for idx, subset in tqdm(enumerate(dataset_subsets)):
+            print(f"Writing to {split_path / f'{idx}.jsonl'}")
+            with open(split_path / f"{idx}.jsonl", "w") as f:
+                # it is a dict from key to list of values for that key
+                # e.g. "text" -> [tex1, ..., textn]
+                # "id" -> [id1, ..., idn]
+                # we instead want a list of dicts in the form of
+                # [{"text": text1, "id": id1 }, ..., {"text": textn, "id": idn }]
+                rows = {}
+                for key, values in subset.items():
+                    for i, value in enumerate(values):
+                        if i not in rows:
+                            rows[i] = {}
+                        rows[i][key] = value
+                rows = rows.values()
+                f.writelines(json.dumps(r) + "\n" for r in rows)
+
+        dataset_subsets = []
+
+
+def download_streaming_dataset(dataset, path_to_save, split_size, row_to_download):
+    dataset_samples = []
+    hf_dataset = None
+    print(dataset)
+    for ds_split in dataset:
+        print(f"Saving `{ds_split}` split")
+        logger.info(f"Saving `{ds_split}` split")
+        # if the dataset is too big, we can split it in multiple files
+        # but if it is small enough, we can save it in a single file
+        dataset_split = dataset[ds_split]
+        pbar = tqdm(
+            dataset_split, total=row_to_download, desc=f"Downloading {ds_split}"
+        )
+        for i, sample in enumerate(pbar, 1):
+            dataset_samples.append(sample)
+
+            if len(dataset_samples) >= row_to_download:
+                # hf_dataset = Dataset.from_list(dataset_samples, split=ds_split)
+                hf_dataset = DatasetDict({ds_split: Dataset.from_list(dataset_samples)})
+                save_to_jsonl(hf_dataset, path_to_save, split_size)
+                dataset_samples = []
+                break
+
+        if len(dataset_samples) > 0:
+            hf_dataset = DatasetDict({ds_split: Dataset.from_list(dataset_samples)})
+            save_to_jsonl(hf_dataset, path_to_save, split_size)
+            dataset_samples = []
 
 
 def main(args):
@@ -28,12 +99,16 @@ def main(args):
         dataset = load_dataset(
             path=args.dataset_name,
             language=args.language,
-            split="train",
+            # split="train",  # TODO change this
             streaming=True,
             cache_dir=HF_CACHE,
             token=True,
         )
-        download_streaming_dataset(dataset, args)
+        # download_streaming_dataset(dataset, args)
+        # TODO improve this
+        download_streaming_dataset(
+            dataset, args.path_to_save, args.split_size, args.max_row
+        )
     else:
         logger.info("==== Starting download CulturaX ====")
         dataset = load_dataset(
@@ -44,46 +119,7 @@ def main(args):
             token=True,
             num_proc=psutil.cpu_count(logical=False),
         )
-        # now we can save the dataset in jsonl format, divided in multiple files
-        # we would like to parallelize this step, we can use the multiprocessing library
-        dataset_path = Path(args.path_to_save)
-        dataset_path.mkdir(parents=True, exist_ok=True)
-
-        # create a new file for each split, parallelize this step
-        dataset_subsets = []
-        for ds_split in dataset:
-            print(f"Saving `{ds_split}` split")
-            logger.info(f"Saving `{ds_split}` split")
-            # if the dataset is too big, we can split it in multiple files
-            # but if it is small enough, we can save it in a single file
-            shards = dataset[ds_split].num_rows // args.split_size + 1
-            print(f"Splitting in {shards} shards")
-            for i in range(shards):
-                dataset_subsets.append(
-                    dataset[ds_split][i * args.split_size : (i + 1) * args.split_size]
-                )
-
-            split_path = dataset_path / f"{ds_split}"
-            split_path.mkdir(parents=True, exist_ok=True)
-
-            for idx, subset in tqdm(enumerate(dataset_subsets)):
-                print(f"Writing to {split_path / f'{idx}.jsonl'}")
-                with open(split_path / f"{idx}.jsonl", "w") as f:
-                    # it is a dict from key to list of values for that key
-                    # e.g. "text" -> [tex1, ..., textn]
-                    # "id" -> [id1, ..., idn]
-                    # we instead want a list of dicts in the form of
-                    # [{"text": text1, "id": id1 }, ..., {"text": textn, "id": idn }]
-                    rows = {}
-                    for key, values in subset.items():
-                        for i, value in enumerate(values):
-                            if i not in rows:
-                                rows[i] = {}
-                            rows[i][key] = value
-                    rows = rows.values()
-                    f.writelines(json.dumps(r) + "\n" for r in rows)
-
-            dataset_subsets = []
+        save_to_jsonl(dataset, args.path_to_save, args.split_size)
 
 
 if __name__ == "__main__":
@@ -107,16 +143,10 @@ if __name__ == "__main__":
         help="Path to save the dataset.",
     )
     parser.add_argument(
-        "--max_mb",
+        "--max_row",
         type=int,
-        default=100,
-        help="Max size (in MB) of data to download",
-    )
-    parser.add_argument(
-        "--partial_mb",
-        type=int,
-        default=10,
-        help="Max size (in MB) of data allowed to be in-memory, the size of each saved file",
+        default=100_00,
+        help="Max number of row to download",
     )
     parser.add_argument(
         "--step",

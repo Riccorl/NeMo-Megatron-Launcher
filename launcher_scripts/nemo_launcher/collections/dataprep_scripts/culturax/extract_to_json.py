@@ -34,42 +34,23 @@ from pathlib import Path
 
 
 def main(args):
-    ds = load_dataset(args.input)
-    ds = ds["train"]
+    # ds = load_dataset(args.input)
+    # ds = ds["train"]
 
     output_path = args.output
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    splits = ds.num_rows // 10_000
-    # create a new file for each 10k rows
-    for i in tqdm(range(splits)):
-        print(f"Writing to {output_path.with_suffix(f'.{i}.jsonl')}")
-        with open(output_path.with_suffix(f".{i}.jsonl"), "w") as f:
-            # for subdict in tqdm(ds[i * 10_000 : (i + 1) * 10_000]):
-                # it is a dict from key to list of values for that key
-                # e.g. "text" -> [tex1, ..., textn]
-                # "id" -> [id1, ..., idn]
-                # we instead want a list of dicts in the form of
-                # [{"text": text1, "id": id1 }, ..., {"text": textn, "id": idn }]
-            rows = {}
-            for key, values in ds[i * 10_000 : (i + 1) * 10_000].items():
-                for i, value in enumerate(values):
-                    if i not in rows:
-                        rows[i] = {}
-                    rows[i][key] = value
-            rows = rows.values()
-            f.writelines(json.dumps(r) + "\n" for r in rows)
-
-    # with open(args.output, "w") as f:
-    #     for row in tqdm(ds):
-    #         jsonl_row = huggingface_hub.datasets.Dataset.from_dict(row).to_json()
-    #         f.write(jsonl_row + "\n")
+    with open(output_path, "w") as out:
+        for json_file in Path(args.input).glob("*.jsonl"):
+            with open(json_file, "r") as f:
+                ds = [json.loads(line) for line in f]
+            for s in ds:
+                out.write(s["text"] + ",")
 
 
-### Main
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Download CulturaX sample")
+    parser = argparse.ArgumentParser()
     parser.add_argument("--input")
     parser.add_argument("--output")
     args = parser.parse_args()
